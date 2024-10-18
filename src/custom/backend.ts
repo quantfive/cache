@@ -1,20 +1,19 @@
-import {
-    S3Client,
-    GetObjectCommand,
-    ListObjectsV2Command
-} from "@aws-sdk/client-s3";
-const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
-import { createReadStream } from "fs";
-import * as crypto from "crypto";
-import {
-    DownloadOptions,
-    getDownloadOptions
-} from "@actions/cache/lib/options";
-import { CompressionMethod } from "@actions/cache/lib/internal/constants";
-import * as core from "@actions/core";
 import * as utils from "@actions/cache/lib/internal/cacheUtils";
+import { CompressionMethod } from "@actions/cache/lib/internal/constants";
+import {
+    DownloadOptions
+} from "@actions/cache/lib/options";
+import * as core from "@actions/core";
+import {
+    GetObjectCommand,
+    ListObjectsV2Command,
+    S3Client
+} from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
+import * as crypto from "crypto";
+import { createReadStream } from "fs";
 import { downloadCacheHttpClientConcurrent } from "./downloadUtils";
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 export interface ArtifactCacheEntry {
     cacheKey?: string;
@@ -32,10 +31,12 @@ if (process.env.RUNS_ON_RUNNER_NAME && process.env.RUNS_ON_RUNNER_NAME !== "") {
     delete process.env.AWS_SESSION_TOKEN;
     delete process.env.AWS_REGION;
     delete process.env.AWS_DEFAULT_REGION;
+    delete process.env.AWS_ENDPOINT;
 }
 
 const versionSalt = "1.0";
 const bucketName = process.env.RUNS_ON_S3_BUCKET_CACHE;
+const awsEndpoint = process.env.AWS_ENDPOINT
 const region =
     process.env.RUNS_ON_AWS_REGION ||
     process.env.AWS_REGION ||
@@ -51,7 +52,12 @@ const downloadQueueSize = Number(process.env.DOWNLOAD_QUEUE_SIZE || "8");
 const downloadPartSize =
     Number(process.env.DOWNLOAD_PART_SIZE || "16") * 1024 * 1024;
 
-const s3Client = new S3Client({ region, forcePathStyle });
+const s3Options = {
+    region,
+    forcePathStyle,
+    ...(awsEndpoint && { endpoint: awsEndpoint })
+    };
+const s3Client = new S3Client(s3Options);
 
 export function getCacheVersion(
     paths: string[],
